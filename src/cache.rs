@@ -6,12 +6,12 @@ use std::io::Write;
 #[serde(rename_all = "camelCase")]
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Item {
-    name: String,
-    path: Vec<String>,
-    organization: Option<String>,
-    has_username: bool,
-    has_password: bool,
-    has_totp: bool,
+    pub name: String,
+    pub path: Vec<String>,
+    pub organization: Option<String>,
+    pub has_username: bool,
+    pub has_password: bool,
+    pub has_totp: bool,
 }
 
 pub struct Cache {
@@ -57,5 +57,9 @@ impl Cache {
             Err(err) => eprintln!("Writing cache file failed: {}", err),
             Ok(_) => eprintln!("Cache updated"),
         }
+    }
+
+    pub fn items(&self) -> &Vec<Item> {
+        &self.items
     }
 }
