@@ -3,10 +3,77 @@ use bitwarden_rofi::bitwarden::{self, Session};
 use bitwarden_rofi::cache::{self, Cache};
 use keyring::Keyring;
 use rustofi::components::EntryBox;
+use rustofi::window::*;
 use std::collections::HashMap;
 use std::process;
 
+// https://github.com/mattydebie/bitwarden-rofi/blob/master/bwmenu
+
 fn main() -> Result<()> {
+    let mut cache = Cache::try_load("/home/jos/.local/share/bitwarden_rofi/cache.json");
+
+    let session = load_session()?;
+    cache.replace(get_items(&session)?);
+
+    // show menu:
+    // - list all items and folders
+    // - when one is chosen; show options for getting:
+    //   * username
+    //   * password
+    //   * otp
+    //   * more?
+    // - sync (and update cache)
+    // - lock
+
+    let mut entries: Vec<String> = vec![];
+    for i in cache.items().iter() {
+        let mut title = i.path.join("/");
+        if title.len() != 0 {
+            title += "/";
+        };
+        title += &i.name;
+        entries.push(title);
+    }
+
+    entries.sort();
+
+    let res = Window::new("Select an entry")
+        .format('s')
+        .location(Location::MiddleCentre)
+        .add_args(
+            vec![
+                "-dmenu",
+                "-markup-rows",
+                "-matching",
+                "fuzzy",
+                "-kb-custom-1",
+                "Alt+r",
+                "-kb-custom-2",
+                "Alt+l",
+                "-mesg",
+                "<b>Alt+r</b>: sync | <b>Alt+l</b>: lock",
+            ]
+            .iter()
+            .map(|s| s.to_string())
+            .collect(),
+        )
+        .lines(15)
+        .show(entries.clone())
+        .expect("Creating rofi window failed");
+
+    if res == "" {
+        println!("You chose cancel. Bye then.");
+        return Ok(());
+    }
+
+    let idx = entries.iter().position(|x| x == &res);
+
+    println!("You chose entry: {:?}", idx);
+
+    Ok(())
+}
+
+fn load_session() -> Result<Session> {
     let keyring = Keyring::new("bitwarden_rofi", "BW_SESSION");
 
     let session = match keyring.get_password() {
@@ -30,7 +97,7 @@ fn main() -> Result<()> {
         Err(_) => None,
     };
 
-    let session = session.unwrap_or_else(|| {
+    Ok(session.unwrap_or_else(|| {
         let password = EntryBox::create_window()
             .add_args(vec!["-password".to_string()])
             .prompt("Enter master password".to_string())
@@ -47,10 +114,10 @@ fn main() -> Result<()> {
         });
 
         session
-    });
+    }))
+}
 
-    let mut cache = Cache::try_load("/home/jos/.local/share/bitwarden_rofi/cache.json");
-
+fn get_items(session: &Session) -> Result<Vec<cache::Item>> {
     let mut folders = HashMap::new();
 
     for f in session.list_folders()?.into_iter() {
@@ -60,40 +127,24 @@ fn main() -> Result<()> {
     let mut items: Vec<cache::Item> = vec![];
 
     for i in session.list_items()?.into_iter() {
+        let path = match folders.get(&i.folder_id) {
+            None => vec![],
+            _ if i.folder_id.is_none() => vec![],
+            Some(folder) => folder.name.split("/").map(|s| s.to_string()).collect(),
+        };
+
+        let login = i.login.as_ref();
+
         let item = cache::Item {
             name: i.name,
-            path: vec![],
+            path: path,
             organization: None,
-            has_username: true,
-            has_password: true,
-            has_totp: true,
+            has_username: login.map(|l| l.username.is_some()).unwrap_or(false),
+            has_password: login.map(|l| l.password.is_some()).unwrap_or(false),
+            has_totp: login.map(|l| l.totp.is_some()).unwrap_or(false),
         };
         items.push(item);
     }
 
-    cache.replace(items);
-
-    // read all items and folders
-    // cache name/folder structure on disk
-    // show menu:
-    // - list all items and folders
-    // - when one is chosen; show options for getting:
-    //   * username
-    //   * password
-    //   * otp
-    //   * more?
-    // - sync (and update cache)
-    // - lock
-
-    // println!("{}", session.key);
-
-    // session.lock().unwrap_or_else(|err| {
-    //     eprintln!("Error locking session: {}", err);
-    // });
-
-    println!("{:?}", session.status());
-
-    // println!("{:?}", session.list_items());
-
-    Ok(())
+    Ok(items)
 }
