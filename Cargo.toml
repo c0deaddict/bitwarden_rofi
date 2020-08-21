@@ -10,6 +10,5 @@ edition = "2018"
 keyring = "0.9.0"
 serde = {version = "1.0", features = ["derive"]}
 serde_json = "1.0"
-rustofi = "0.2.2"
 chrono = {version = "0.4.15", features = ["serde"]}
 anyhow = "1.0"
