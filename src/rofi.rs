@@ -42,13 +42,16 @@ impl Error for RofiError {
 impl RofiWindow {
     fn to_args(&self) -> Vec<String> {
         let mut args = Vec::new();
-        args.extend(vec!["-prompt".to_string(), self.prompt.clone()]);
-        args.extend(vec!["-lines".to_string(), self.lines.to_string()]);
+        args.extend(vec!["-p".to_string(), self.prompt.clone()]);
         if let Some(msg) = self.message.as_ref() {
             args.extend(vec!["-mesg".to_string(), msg.to_string()]);
         }
         if let Some(width) = self.width {
             args.extend(vec!["-width".to_string(), width.to_string()]);
+        }
+        args.extend(vec!["-lines".to_string(), self.lines.to_string()]);
+        if self.password {
+            args.push("-password".to_string());
         }
         args.extend(self.extra_args.clone());
         args
@@ -95,6 +98,18 @@ impl RofiWindow {
         self
     }
 
+    pub fn kb_custom(mut self, idx: i32, key: &str) -> Self {
+        let arg = format!("-kb-custom-{}", idx);
+        self.extra_args.extend(vec![arg, key.to_string()]);
+        self
+    }
+
+    pub fn matching(mut self, algo: &str) -> Self {
+        self.extra_args
+            .extend(vec!["-matching".to_string(), algo.to_string()]);
+        self
+    }
+
     pub fn show(self, options: Vec<String>) -> Result<RofiResponse> {
         let args = self.to_args();
 
@@ -129,5 +144,19 @@ impl RofiWindow {
         let selection = str::from_utf8(&output.stdout)?.trim().to_string();
 
         Ok(RofiResponse::Entry(selection))
+    }
+}
+
+impl RofiResponse {
+    pub fn entry(&self) -> Result<String> {
+        match self {
+            RofiResponse::Entry(s) => Ok(s.to_string()),
+            _ => {
+                let e = RofiError {
+                    details: "expected an entry as response".to_string(),
+                };
+                Err(e.into())
+            }
+        }
     }
 }

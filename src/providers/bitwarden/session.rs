@@ -136,6 +136,10 @@ impl Session {
         }
     }
 
+    pub fn sync(&self) -> Result<()> {
+        self.call_json(&["sync"])
+    }
+
     pub fn status(&self) -> Result<Status> {
         self.call_json(&["status"])
     }
@@ -148,8 +152,8 @@ impl Session {
         self.call_json(&["list", "items"])
     }
 
-    pub fn sync(&self) -> Result<()> {
-        self.call_json(&["sync"])
+    pub fn read_field(&self, id: &str, field: &str) -> Result<String> {
+        self.call_str(&["get", id, field])
     }
 
     fn call_str(&self, args: &[&str]) -> Result<String> {

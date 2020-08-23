@@ -1,27 +1,17 @@
-use serde::{Deserialize, Serialize};
+use crate::item::Item;
 use std::fs;
 use std::fs::File;
 use std::io::Write;
-
-#[serde(rename_all = "camelCase")]
-#[derive(Serialize, Deserialize, Debug)]
-pub struct Item {
-    pub name: String,
-    pub path: Vec<String>,
-    pub organization: Option<String>,
-    pub has_username: bool,
-    pub has_password: bool,
-    pub has_totp: bool,
-}
+use std::path::{Path, PathBuf};
 
 pub struct Cache {
-    filename: String,
+    path: PathBuf,
     items: Vec<Item>,
 }
 
 impl Cache {
-    pub fn try_load(filename: &str) -> Cache {
-        let items = match fs::read_to_string(filename) {
+    pub fn try_load(path: &Path) -> Cache {
+        let items = match fs::read_to_string(path) {
             Ok(contents) => match serde_json::from_str(&contents) {
                 Ok(items) => items,
                 Err(err) => {
@@ -37,14 +27,14 @@ impl Cache {
 
         Cache {
             items,
-            filename: filename.to_string(),
+            path: path.to_owned(),
         }
     }
 
     pub fn replace(&mut self, items: Vec<Item>) {
         self.items = items;
 
-        let mut file = match File::create(&self.filename) {
+        let mut file = match File::create(&self.path) {
             Ok(file) => file,
             Err(err) => {
                 eprintln!("Could not create cache file: {}", err);
