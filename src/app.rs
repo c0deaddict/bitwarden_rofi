@@ -1,27 +1,85 @@
 use crate::cache::Cache;
-use crate::providers::bitwarden::BitwardenProvider;
-use crate::providers::Provider;
+use crate::provider::{NewProvider, Provider};
+use crate::providers::bitwarden::Bitwarden;
+use crate::providers::keyhub::Keyhub;
+use crate::providers::password_store::PasswordStore;
+use crate::providers::terraform::Terraform;
 use crate::rofi::{RofiResponse, RofiWindow};
 use anyhow::Result;
+use serde::Deserialize;
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::fs;
+use std::io;
+use std::path::PathBuf;
 use xdg;
 
+#[serde(rename_all = "camelCase")]
+#[derive(Deserialize, Debug)]
+struct ProviderConfig {
+    #[serde(rename = "type")]
+    type_: String,
+    shortcut: Option<String>,
+    config: serde_json::Value,
+}
+
+// TODO: shared rofi args
+#[serde(rename_all = "camelCase")]
+#[derive(Deserialize, Debug)]
+struct Config {
+    providers: HashMap<String, ProviderConfig>,
+}
+
 pub struct App {
-    // config file with providers
+    config: Config,
+    providers: HashMap<String, RefCell<Box<dyn Provider>>>,
+    xdg_dirs: xdg::BaseDirectories,
 }
 
 impl App {
-    pub fn new() -> App {
-        App {}
+    pub fn new() -> Result<App> {
+        let mut providers: HashMap<String, Box<NewProvider>> = HashMap::new();
+        providers.insert("bitwarden".to_owned(), Box::new(Bitwarden::new));
+        providers.insert("password_store".to_owned(), Box::new(PasswordStore::new));
+        providers.insert("terraform".to_owned(), Box::new(Terraform::new));
+        providers.insert("keyhub".to_owned(), Box::new(Keyhub::new));
+
+        let xdg_dirs = xdg::BaseDirectories::with_prefix("bitwarden_rofi")?;
+
+        let config_file = xdg_dirs.find_config_file("config.json").unwrap();
+        let contents = fs::read_to_string(config_file)?;
+        let config: Config = serde_json::from_str(&contents)?;
+
+        let providers = config
+            .providers
+            .iter()
+            .map(|(key, provider)| match providers.get(&provider.type_) {
+                Some(new_fn) => (
+                    key.to_owned(),
+                    RefCell::new(new_fn(key, provider.config.to_owned())),
+                ),
+                None => panic!("Provider {} does not exist", key),
+            })
+            .collect();
+
+        Ok(App {
+            config,
+            providers,
+            xdg_dirs,
+        })
     }
 
     pub fn show(&self) -> Result<()> {
-        let xdg_dirs = xdg::BaseDirectories::with_prefix("bitwarden_rofi")?;
-        let cache_file = xdg_dirs.place_cache_file("cache.json")?;
-        eprintln!("Cache file is {:?}", cache_file);
-        let mut cache = Cache::try_load(&cache_file);
+        // TODO: deterministic sort order
+        let (key, provider) = self.providers.iter().next().unwrap();
 
-        let mut bw = BitwardenProvider::new();
-        cache.replace(bw.get_items()?);
+        eprintln!("First provider = {}", key);
+
+        // TODO: provider needs to know:
+        // - the shortcuts to the rest
+        // - xdg dirs (with a custom prefix?)
+
+        // TODO: notify-send when doing a long op, (eg. bw first time initialize)
 
         // show menu:
         // - list all items and folders
@@ -34,7 +92,7 @@ impl App {
         // - lock
 
         let mut entries: Vec<String> = vec![];
-        for i in cache.items().iter() {
+        for i in provider.borrow_mut().list_items()?.iter() {
             entries.push(i.title.clone());
         }
 
@@ -62,5 +120,9 @@ impl App {
         }
 
         Ok(())
+    }
+
+    pub fn get_cache_file(&self, name: &str) -> io::Result<PathBuf> {
+        self.xdg_dirs.place_cache_file(name)
     }
 }

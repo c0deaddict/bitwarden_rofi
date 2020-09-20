@@ -15,3 +15,8 @@ pub enum Field {
     Totp,
     Other(String),
 }
+
+pub struct Action {
+    pub title: String,
+    pub shortcut: String,
+}

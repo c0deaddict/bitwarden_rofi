@@ -1,4 +1,4 @@
 mod provider;
 mod session;
 
-pub use provider::BitwardenProvider;
+pub use provider::Bitwarden;

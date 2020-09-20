@@ -1,19 +1,32 @@
 use super::session::{Error as SessionError, Session};
-use crate::item::{Field, Item};
-use crate::providers::Provider;
+use crate::item::{Action, Field, Item};
+use crate::provider::Provider;
 use crate::rofi::RofiWindow;
 use anyhow::Result;
 use keyring::Keyring;
+use serde::Deserialize;
 use std::collections::HashMap;
 
-// TODO: how to pass config??
-pub struct BitwardenProvider {
-    session: Option<Session>,
+#[serde(rename_all = "camelCase")]
+#[derive(Deserialize, Debug)]
+pub struct Config {
+    cache: bool,
 }
 
-impl BitwardenProvider {
-    pub fn new() -> Self {
-        Self { session: None }
+pub struct Bitwarden {
+    id: String,
+    session: Option<Session>,
+    config: Config,
+}
+
+impl Bitwarden {
+    pub fn new(id: &str, config: serde_json::Value) -> Box<dyn Provider> {
+        let config: Config = serde_json::from_value(config).unwrap();
+        Box::new(Self {
+            config,
+            id: id.to_owned(),
+            session: None,
+        })
     }
 
     fn get_session(&mut self) -> Result<&Session> {
@@ -71,14 +84,24 @@ impl BitwardenProvider {
                 self.session.as_ref().unwrap()
             })
     }
-}
 
-impl Provider for BitwardenProvider {
-    fn is_blocking() -> bool {
-        true
+    fn lock(&mut self) -> Result<()> {
+        // TODO: this can open a session if it wasn't...
+        self.get_session()?.lock()?;
+        let keyring = Keyring::new("bitwarden_rofi", "BW_SESSION");
+        keyring.delete_password().unwrap_or_else(|err| {
+            eprintln!("Deleting entry from keyring failed: {}", err);
+        });
+        Ok(())
     }
 
-    fn get_items(&mut self) -> Result<Vec<Item>> {
+    fn sync(&mut self) -> Result<()> {
+        self.get_session()?.sync()
+    }
+}
+
+impl Provider for Bitwarden {
+    fn list_items(&mut self) -> Result<Vec<Item>> {
         let mut folders = HashMap::new();
 
         let session = self.get_session()?;
@@ -124,7 +147,7 @@ impl Provider for BitwardenProvider {
         Ok(items)
     }
 
-    fn read_field(&mut self, id: &str, field: &Field) -> Result<String> {
+    fn read_field(&mut self, item: &Item, field: &Field) -> Result<String> {
         let field_name = match field {
             Field::Username => "username",
             Field::Password => "password",
@@ -132,20 +155,12 @@ impl Provider for BitwardenProvider {
             Field::Other(name) => &name,
         };
         let session = self.get_session()?;
-        session.read_field(id, field_name)
+        session.read_field(&item.id, field_name)
     }
 
-    fn lock(&mut self) -> Result<()> {
-        // TODO: this can open a session if it wasn't...
-        self.get_session()?.lock()?;
-        let keyring = Keyring::new("bitwarden_rofi", "BW_SESSION");
-        keyring.delete_password().unwrap_or_else(|err| {
-            eprintln!("Deleting entry from keyring failed: {}", err);
-        });
-        Ok(())
+    fn list_actions(&mut self) -> Result<Vec<Action>> {
+        Ok(vec![])
     }
 
-    fn sync(&mut self) -> Result<()> {
-        self.get_session()?.sync()
-    }
+    fn do_action(&mut self, action: &Action) {}
 }
