@@ -1,3 +1,4 @@
+use crate::app::App;
 use crate::item::{Action, Field, Item};
 use crate::provider::Provider;
 use anyhow::Result;
@@ -17,7 +18,7 @@ pub struct Terraform {}
 // the captured output of the last line as prompt for the entrybox.
 
 impl Terraform {
-    pub fn new(id: &str, config: serde_json::Value) -> Box<dyn Provider> {
+    pub fn new(app: &App, id: &str, config: serde_json::Value) -> Box<dyn Provider> {
         let config: Config = serde_json::from_value(config).unwrap();
         println!("terraform config = {:?}", config);
         Box::new(Terraform {})

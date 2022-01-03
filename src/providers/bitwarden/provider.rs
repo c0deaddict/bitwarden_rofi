@@ -1,4 +1,5 @@
 use super::session::{Error as SessionError, Session};
+use crate::app::App;
 use crate::item::{Action, Field, Item};
 use crate::provider::Provider;
 use crate::rofi::RofiWindow;
@@ -20,7 +21,7 @@ pub struct Bitwarden {
 }
 
 impl Bitwarden {
-    pub fn new(id: &str, config: serde_json::Value) -> Box<dyn Provider> {
+    pub fn new(app: &App, id: &str, config: serde_json::Value) -> Box<dyn Provider> {
         let config: Config = serde_json::from_value(config).unwrap();
         Box::new(Self {
             config,

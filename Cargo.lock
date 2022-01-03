@@ -63,6 +63,7 @@ dependencies = [
  "anyhow",
  "chrono",
  "keyring",
+ "lazy_static",
  "serde",
  "serde_json",
  "xdg",

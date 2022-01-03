@@ -13,3 +13,4 @@ serde_json = "1.0"
 chrono = {version = "0.4.15", features = ["serde"]}
 anyhow = "1.0"
 xdg = "2.1"
+lazy_static = "1.4.0"

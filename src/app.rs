@@ -1,4 +1,3 @@
-use crate::cache::Cache;
 use crate::provider::{NewProvider, Provider};
 use crate::providers::bitwarden::Bitwarden;
 use crate::providers::keyhub::Keyhub;
@@ -32,46 +31,47 @@ struct Config {
 
 pub struct App {
     config: Config,
-    providers: HashMap<String, RefCell<Box<dyn Provider>>>,
     xdg_dirs: xdg::BaseDirectories,
+}
+
+lazy_static! {
+    static ref PROVIDERS: HashMap<&'static str, Box<NewProvider>> = {
+        let mut m: HashMap<&'static str, Box<NewProvider>> = HashMap::new();
+        m.insert("bitwarden", Box::new(Bitwarden::new));
+        m.insert("password_store", Box::new(PasswordStore::new));
+        m.insert("terraform", Box::new(Terraform::new));
+        m.insert("keyhub", Box::new(Keyhub::new));
+        m
+    };
 }
 
 impl App {
     pub fn new() -> Result<App> {
-        let mut providers: HashMap<String, Box<NewProvider>> = HashMap::new();
-        providers.insert("bitwarden".to_owned(), Box::new(Bitwarden::new));
-        providers.insert("password_store".to_owned(), Box::new(PasswordStore::new));
-        providers.insert("terraform".to_owned(), Box::new(Terraform::new));
-        providers.insert("keyhub".to_owned(), Box::new(Keyhub::new));
-
         let xdg_dirs = xdg::BaseDirectories::with_prefix("bitwarden_rofi")?;
 
         let config_file = xdg_dirs.find_config_file("config.json").unwrap();
         let contents = fs::read_to_string(config_file)?;
         let config: Config = serde_json::from_str(&contents)?;
 
-        let providers = config
+        Ok(App { config, xdg_dirs })
+    }
+
+    pub fn show(&self) -> Result<()> {
+        let providers: HashMap<String, RefCell<Box<dyn Provider>>> = self
+            .config
             .providers
             .iter()
-            .map(|(key, provider)| match providers.get(&provider.type_) {
+            .map(|(key, provider)| match PROVIDERS.get(&provider.type_[..]) {
                 Some(new_fn) => (
                     key.to_owned(),
-                    RefCell::new(new_fn(key, provider.config.to_owned())),
+                    RefCell::new(new_fn(&self, key, provider.config.to_owned())),
                 ),
                 None => panic!("Provider {} does not exist", key),
             })
             .collect();
 
-        Ok(App {
-            config,
-            providers,
-            xdg_dirs,
-        })
-    }
-
-    pub fn show(&self) -> Result<()> {
         // TODO: deterministic sort order
-        let (key, provider) = self.providers.iter().next().unwrap();
+        let (key, provider) = providers.iter().next().unwrap();
 
         eprintln!("First provider = {}", key);
 

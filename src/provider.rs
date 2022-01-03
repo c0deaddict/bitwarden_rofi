@@ -1,7 +1,8 @@
+use crate::app::App;
 use crate::item::{Action, Field, Item};
 use anyhow::Result;
 
-pub type NewProvider = dyn Fn(&str, serde_json::Value) -> Box<dyn Provider>;
+pub type NewProvider = dyn Sync + Fn(&App, &str, serde_json::Value) -> Box<dyn Provider>;
 
 pub trait Provider {
     fn list_items(&mut self) -> Result<Vec<Item>>;
